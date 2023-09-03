@@ -1,1 +1,1 @@
-Hello.say_hello();;
+Hello.say_hello ()
