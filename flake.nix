@@ -1,5 +1,5 @@
 {
-  description = "A flake demonstrating how to build OCaml projects with Dune";
+  description = "OCaml Dune flake";
 
   # Flake dependency specification
   #
@@ -57,13 +57,97 @@
         #     $ nix build .#<name>
         #     $ nix run .#<name> -- <args?>
         #
-        packages = {};
+        packages = {
+          # The package that will be built or run by default. For example:
+          #
+          #     $ nix build
+          #     $ nix run -- <args?>
+          #
+          default = self.packages.${system}.prooftrees;
+
+          prooftrees = ocamlPackages.buildDunePackage {
+            pname = "prooftrees";
+            version = "0.1.0";
+            duneVersion = "3";
+            src = sources.ocaml;
+
+            strictDeps = true;
+
+            preBuild = ''
+              dune build prooftrees.opam
+            '';
+          };
+        };
 
         # Flake checks
         #
         #     $ nix flake check
         #
-        checks = {};
+        checks = {
+          # Run tests for the `prooftrees` package
+          prooftrees =
+            let
+              # Patches calls to dune commands to produce log-friendly output
+              # when using `nix ... --print-build-log`. Ideally there would be
+              # support for one or more of the following:
+              #
+              # In Dune:
+              #
+              # - have workspace-specific dune configuration files
+              #
+              # In NixPkgs:
+              #
+              # - allow dune flags to be set in in `ocamlPackages.buildDunePackage`
+              # - alter `ocamlPackages.buildDunePackage` to use `--display=short`
+              # - alter `ocamlPackages.buildDunePackage` to allow `--config-file=FILE` to be set
+              patchDuneCommand =
+                let
+                  subcmds = [ "build" "test" "runtest" "install" ];
+                in
+                lib.replaceStrings
+                  (lib.lists.map (subcmd: "dune ${subcmd}") subcmds)
+                  (lib.lists.map (subcmd: "dune ${subcmd} --display=short") subcmds);
+            in
+
+            self.packages.${system}.prooftrees.overrideAttrs
+              (oldAttrs: {
+                name = "check-${oldAttrs.name}";
+                doCheck = true;
+                buildPhase = patchDuneCommand oldAttrs.buildPhase;
+                checkPhase = patchDuneCommand oldAttrs.checkPhase;
+                # skip installation
+                installPhase = "touch $out";
+              });
+
+          # Check Dune and OCaml formatting
+          dune-fmt = legacyPackages.runCommand "check-dune-fmt"
+            {
+              nativeBuildInputs = [
+                ocamlPackages.dune_3
+                ocamlPackages.ocaml
+                legacyPackages.ocamlformat
+              ];
+            }
+            ''
+              echo "checking dune and ocaml formatting"
+              dune build \
+                --display=short \
+                --no-print-directory \
+                --root="${sources.ocaml}" \
+                --build-dir="$(pwd)/_build" \
+                @fmt
+              touch $out
+            '';
+
+          # Check Nix formatting
+          nixpkgs-fmt = legacyPackages.runCommand "check-nixpkgs-fmt"
+            { nativeBuildInputs = [ legacyPackages.nixpkgs-fmt ]; }
+            ''
+              echo "checking nix formatting"
+              nixpkgs-fmt --check ${sources.nix}
+              touch $out
+            '';
+        };
 
         # Development shells
         #
@@ -85,8 +169,6 @@
               legacyPackages.ocamlformat
               # For `dune build --watch ...`
               legacyPackages.fswatch
-              # For `dune build @doc`
-              ocamlPackages.odoc
               # OCaml editor support
               ocamlPackages.ocaml-lsp
               # Nicely formatted types on hover

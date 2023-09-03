@@ -5,5 +5,7 @@
 
 (executable
  (name main)
- (public_name hello)
- (package hello))
+ (public_name prooftrees)
+ (package prooftrees)
+ (libraries hello)
+)

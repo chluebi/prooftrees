@@ -1,3 +1,1 @@
-let say_hello () = print_endline "Hello, World!";;
-
-say_hello ();;
+Hello.say_hello();;
