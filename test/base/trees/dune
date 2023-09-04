@@ -3,7 +3,7 @@
 ; - https://dune.readthedocs.io/en/stable/tests.html
 ; - https://dune.readthedocs.io/en/stable/dune-files.html#tests-stanza
 
-(test
- (name say_hello)
+(tests
+ (names tree_sum)
  (package prooftrees)
- (libraries hello))
+ (libraries base))
