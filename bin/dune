@@ -7,4 +7,4 @@
  (name main)
  (public_name prooftrees)
  (package prooftrees)
- (libraries base))
+ (libraries base logic))

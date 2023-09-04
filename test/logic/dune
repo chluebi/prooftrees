@@ -1,0 +1,9 @@
+; For more information on writing and running tests, see the Dune documentation:
+;
+; - https://dune.readthedocs.io/en/stable/tests.html
+; - https://dune.readthedocs.io/en/stable/dune-files.html#tests-stanza
+
+(tests
+ (names print_tree)
+ (package prooftrees)
+ (libraries base logic))
