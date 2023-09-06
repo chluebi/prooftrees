@@ -2,8 +2,8 @@ open Base.Trees
 open Logic
 
 let () =
-  let t : op tree_type =
+  let tree : operator tree_type =
     Node (Or, [ Node (Var "A", []); Node (Var "B", []) ])
   in
-  let l_exp = new Logic.logic_exp in
-  print_endline (l_exp#tree_to_string t)
+  let module ResultModule = TreePrinter (LogicExpression) in
+  print_endline (ResultModule.print_tree tree)
