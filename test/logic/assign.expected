@@ -1,0 +1,5 @@
+Or(A, B)
+Or(A, And(C, D))
+Or(Or(A, B), And(C, D))
+Or(Or(A, A), Or(A, A))
+Not(Or(A, A))
