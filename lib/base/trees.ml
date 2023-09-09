@@ -10,9 +10,11 @@ module type AssignableTree = sig
   val tree_check : t -> unit
   val tree_to_string : t -> string
   val tree_assign : ass -> t -> t
+  val tree_match_with : t -> t -> ass option
 end
 
 module TreeAssigner (M : AssignableTree) = struct
   let print_tree tree = M.tree_to_string tree
   let assign ass tree = M.tree_assign ass tree
+  let match_with tree structure = M.tree_match_with tree structure
 end

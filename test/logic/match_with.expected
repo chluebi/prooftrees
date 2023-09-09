@@ -1,0 +1,6 @@
+Or(Or(A, B), Or(A, B))
+No assignment
+A
+Not(A)
+Or(Not(A), Not(A))
+Or(A, B)

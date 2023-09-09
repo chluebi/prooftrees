@@ -49,9 +49,40 @@ module LogicExpression = struct
       | _ -> Node (op, l)
     in
     tree_fold assign tree
+
+  let merge assignment1 (assignment2 : t Assignment.t) : t Assignment.t option =
+    let assignment2 = Some assignment2 in
+    let f (key : string) (value : t) (assignment2 : t Assignment.t option) :
+        t Assignment.t option =
+      match assignment2 with
+      | Some assignment2 -> (
+          match Assignment.find_opt key assignment2 with
+          | Some v when v = value -> Some assignment2
+          | Some _ -> None
+          | None -> Some (Assignment.add key value assignment2))
+      | None -> None
+    in
+    Assignment.fold f assignment1 assignment2
+
+  let rec tree_match_with tree structure : t Assignment.t option =
+    match (tree, structure) with
+    | Node (op1, l1), Node (Var s, _) ->
+        Some (Assignment.add s (Node (op1, l1)) Assignment.empty)
+    | Node (op1, l1), Node (op2, l2) ->
+        if op1 = op2 && List.length l1 = List.length l2 then
+          let l =
+            List.map (fun (a, b) -> tree_match_with a b) (List.combine l1 l2)
+          in
+          let f r ass =
+            match (r, ass) with Some r, Some ass -> merge r ass | _ -> None
+          in
+          List.fold_left f (Some Assignment.empty) l
+        else None
 end
 
 module Examples = struct
+  let treeA = Node (Var "A", [])
+  let treeB = Node (Var "B", [])
   let tree1 = Node (Or, [ Node (Var "A", []); Node (Var "B", []) ])
   let tree2 = Node (And, [ Node (Var "C", []); Node (Var "D", []) ])
   let tree3 = Node (Or, [ Node (Var "A", []); Node (Var "A", []) ])
