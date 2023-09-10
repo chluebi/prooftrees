@@ -13,7 +13,7 @@ let () =
       (tree1, tree1, tree1);
     ]
   in
-  let module ResultModule = TreeAssigner (LogicExpression) in
+  let module ResultModule = TreeAssigner (AssignableTree (LogicExpression)) in
   let f (tree, structure, ass_tree) =
     match ResultModule.match_with tree structure with
     | Some ass ->
