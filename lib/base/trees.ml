@@ -20,10 +20,10 @@ module type AssignableTree = sig
   module Assignment : Map.S
   module KeySet : Set.S
 
-  val tree_check : t -> unit
-  val tree_to_string : t -> string
-  val tree_assign : t Assignment.t -> t -> t
-  val tree_match_with : t -> t -> t Assignment.t option
+  val check : t -> unit
+  val to_string : t -> string
+  val assign : t Assignment.t -> t -> t
+  val match_with : t -> t -> t Assignment.t option
 end
 
 module AssignableTree (T : BaseTree) = struct
@@ -33,7 +33,7 @@ module AssignableTree (T : BaseTree) = struct
   module Assignment = Map.Make (T.Key)
   module KeySet = Set.Make (T.Key)
 
-  let tree_check (tree : t) : unit =
+  let check (tree : t) : unit =
     let check (op : elt) (l : unit list) =
       let length = List.length l in
       let expected_length = T.child_count op in
@@ -47,7 +47,7 @@ module AssignableTree (T : BaseTree) = struct
     in
     tree_fold check tree
 
-  let tree_to_string (tree : t) : string =
+  let to_string (tree : t) : string =
     let rec join (sep : string) (s : string list) : string =
       match s with
       | [] -> ""
@@ -60,7 +60,7 @@ module AssignableTree (T : BaseTree) = struct
     in
     tree_fold print_node tree
 
-  let tree_assign (assignment : t Assignment.t) (tree : t) : t =
+  let assign (assignment : t Assignment.t) (tree : t) : t =
     let assign (op : elt) (l : t list) =
       match T.var_opt op with
       | Some s -> (
@@ -85,7 +85,7 @@ module AssignableTree (T : BaseTree) = struct
     in
     Assignment.fold f assignment1 (Some assignment2)
 
-  let rec tree_match_with (tree : t) (structure : t) : t Assignment.t option =
+  let rec match_with (tree : t) (structure : t) : t Assignment.t option =
     match (tree, structure) with
     | Node (op1, l1), Node (op2, l2) -> (
         match T.var_opt op2 with
@@ -93,9 +93,7 @@ module AssignableTree (T : BaseTree) = struct
         | None ->
             if op1 = op2 && List.length l1 = List.length l2 then
               let l =
-                List.map
-                  (fun (a, b) -> tree_match_with a b)
-                  (List.combine l1 l2)
+                List.map (fun (a, b) -> match_with a b) (List.combine l1 l2)
               in
               let f r ass =
                 match (r, ass) with
@@ -104,10 +102,28 @@ module AssignableTree (T : BaseTree) = struct
               in
               List.fold_left f (Some Assignment.empty) l
             else None)
+
+  let free_variables (tree : t) : KeySet.t =
+    let f (op : elt) (l : KeySet.t list) =
+      let new_variables =
+        match T.var_opt op with
+        | Some s -> KeySet.singleton s
+        | None -> KeySet.empty
+      in
+      List.fold_left
+        (fun new_set acc -> KeySet.union new_set acc)
+        new_variables l
+    in
+    tree_fold f tree
+
+  let assigned_variables (assignment : t Assignment.t) =
+    Assignment.fold
+      (fun key _ acc -> KeySet.add key acc)
+      assignment KeySet.empty
 end
 
 module TreeAssigner (M : AssignableTree) = struct
-  let print_tree tree = M.tree_to_string tree
-  let assign ass tree = M.tree_assign ass tree
-  let match_with tree structure = M.tree_match_with tree structure
+  let print_tree tree = M.to_string tree
+  let assign ass tree = M.assign ass tree
+  let match_with tree structure = M.match_with tree structure
 end
