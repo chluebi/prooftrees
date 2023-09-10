@@ -9,6 +9,7 @@ module type BaseTree = sig
   module Key : Map.OrderedType
 
   val element_to_string : elt -> string
+  val key_to_string : Key.t -> string
   val child_count : elt -> int
   val var_opt : elt -> Key.t option
 end
@@ -22,8 +23,12 @@ module type AssignableTree = sig
 
   val check : t -> unit
   val to_string : t -> string
+  val ass_to_string : t Assignment.t -> string
+  val keyset_to_string : KeySet.t -> string
   val assign : t Assignment.t -> t -> t
   val match_with : t -> t -> t Assignment.t option
+  val free_variables : t -> KeySet.t
+  val assigned_variables : t Assignment.t -> KeySet.t
 end
 
 module AssignableTree (T : BaseTree) = struct
@@ -48,17 +53,24 @@ module AssignableTree (T : BaseTree) = struct
     tree_fold check tree
 
   let to_string (tree : t) : string =
-    let rec join (sep : string) (s : string list) : string =
-      match s with
-      | [] -> ""
-      | head :: [] -> head
-      | head :: tail -> head ^ sep ^ join sep tail
-    in
     let print_node (op : elt) (l : string list) =
       if List.length l = 0 then T.element_to_string op
-      else T.element_to_string op ^ "(" ^ join ", " l ^ ")"
+      else T.element_to_string op ^ "(" ^ Util.join ", " l ^ ")"
     in
     tree_fold print_node tree
+
+  let ass_to_string (assignment : t Assignment.t) : string =
+    let l =
+      Assignment.fold
+        (fun key value acc ->
+          (T.key_to_string key ^ " -> " ^ to_string value) :: acc)
+        assignment []
+    in
+    "{" ^ Util.join ", " l ^ "}"
+
+  let keyset_to_string (keyset : KeySet.t) : string =
+    let l = KeySet.fold (fun elt acc -> T.key_to_string elt :: acc) keyset [] in
+    "{" ^ Util.join ", " l ^ "}"
 
   let assign (assignment : t Assignment.t) (tree : t) : t =
     let assign (op : elt) (l : t list) =
@@ -124,6 +136,9 @@ end
 
 module TreeAssigner (M : AssignableTree) = struct
   let print_tree tree = M.to_string tree
+  let print_assignment ass = M.ass_to_string ass
+  let print_keyset keyset = M.keyset_to_string keyset
   let assign ass tree = M.assign ass tree
   let match_with tree structure = M.match_with tree structure
+  let free_variables tree = M.free_variables tree
 end

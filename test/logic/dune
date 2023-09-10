@@ -4,6 +4,6 @@
 ; - https://dune.readthedocs.io/en/stable/dune-files.html#tests-stanza
 
 (tests
- (names print_tree assign match_with)
+ (names print_tree assign match_with free_variables)
  (package prooftrees)
  (libraries base logic))
