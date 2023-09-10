@@ -18,13 +18,17 @@ module type AssignableTree = sig
   type elt
   type t = elt tree_type
 
+  module Key : Map.OrderedType
   module Assignment : Map.S
   module KeySet : Set.S
 
   val check : t -> unit
   val to_string : t -> string
+  val key_to_string : Key.t -> string
   val ass_to_string : t Assignment.t -> string
   val keyset_to_string : KeySet.t -> string
+  val compare : t -> t -> int
+  val var_opt : elt -> Key.t option
   val assign : t Assignment.t -> t -> t
   val match_with : t -> t -> t Assignment.t option
   val free_variables : t -> KeySet.t
@@ -35,6 +39,7 @@ module AssignableTree (T : BaseTree) = struct
   type elt = T.elt
   type t = elt tree_type
 
+  module Key = T.Key
   module Assignment = Map.Make (T.Key)
   module KeySet = Set.Make (T.Key)
 
@@ -59,22 +64,29 @@ module AssignableTree (T : BaseTree) = struct
     in
     tree_fold print_node tree
 
+  let key_to_string = T.key_to_string
+
   let ass_to_string (assignment : t Assignment.t) : string =
     let l =
       Assignment.fold
         (fun key value acc ->
-          (T.key_to_string key ^ " -> " ^ to_string value) :: acc)
+          (key_to_string key ^ " -> " ^ to_string value) :: acc)
         assignment []
     in
     "{" ^ Util.join ", " l ^ "}"
 
   let keyset_to_string (keyset : KeySet.t) : string =
-    let l = KeySet.fold (fun elt acc -> T.key_to_string elt :: acc) keyset [] in
+    let l = KeySet.fold (fun elt acc -> key_to_string elt :: acc) keyset [] in
     "{" ^ Util.join ", " l ^ "}"
+
+  let compare (tree1 : t) (tree2 : t) : int =
+    String.compare (to_string tree1) (to_string tree2)
+
+  let var_opt = T.var_opt
 
   let assign (assignment : t Assignment.t) (tree : t) : t =
     let assign (op : elt) (l : t list) =
-      match T.var_opt op with
+      match var_opt op with
       | Some s -> (
           match Assignment.find_opt s assignment with
           | Some subtree -> subtree
@@ -141,4 +153,67 @@ module TreeAssigner (M : AssignableTree) = struct
   let assign ass tree = M.assign ass tree
   let match_with tree structure = M.match_with tree structure
   let free_variables tree = M.free_variables tree
+end
+
+module type TreeSet = sig
+  type elt
+  type t = elt tree_type
+
+  module Assignment : Map.S
+  module KeySet : Set.S
+
+  val check : t -> unit
+  val to_string : t -> string
+  val ass_to_string : t Assignment.t -> string
+  val keyset_to_string : KeySet.t -> string
+  val assign : t Assignment.t -> t -> t
+  val match_with : t -> t -> t Assignment.t option
+  val free_variables : t -> KeySet.t
+  val assigned_variables : t Assignment.t -> KeySet.t
+end
+
+module TreeSet (T : AssignableTree) = struct
+  module Assignment = Map.Make (T.Key)
+  module KeySet = Set.Make (T.Key)
+  module TreeSet = Set.Make (T)
+
+  type elt = T.t
+  type t = TreeSet.t
+
+  let check (trees : t) = TreeSet.iter T.check trees
+
+  let to_string (trees : t) =
+    let l = TreeSet.fold (fun elt acc -> T.to_string elt :: acc) trees [] in
+    "{" ^ Util.join ", " l ^ "}"
+
+  let key_to_string = T.key_to_string
+
+  let ass_to_string (assignment : t Assignment.t) : string =
+    let l =
+      Assignment.fold
+        (fun key value acc ->
+          (T.key_to_string key ^ " -> " ^ to_string value) :: acc)
+        assignment []
+    in
+    "{" ^ Util.join ", " l ^ "}"
+
+  let keyset_to_string (keyset : KeySet.t) : string =
+    let l = KeySet.fold (fun elt acc -> key_to_string elt :: acc) keyset [] in
+    "{" ^ Util.join ", " l ^ "}"
+
+  let compare (treeset1 : t) (treeset2 : t) : int =
+    String.compare (to_string treeset1) (to_string treeset2)
+
+  let assign (assignment : t Assignment.t) (treeset : t) : t =
+    let f (tree : elt) (acc : t) =
+      match tree with
+      | Node (op, _) -> (
+          match T.var_opt op with
+          | Some s -> (
+              match Assignment.find_opt s assignment with
+              | Some set -> TreeSet.union set acc
+              | None -> TreeSet.add tree acc)
+          | None -> TreeSet.add tree acc)
+    in
+    TreeSet.fold f treeset TreeSet.empty
 end
