@@ -97,7 +97,7 @@ module AssignableTree (T : BaseTree) = struct
       | Some s -> (
           match Assignment.find_opt s assignment with
           | Some subtree -> subtree
-          | None -> Node (op, []))
+          | None -> Node (op, l))
       | _ -> Node (op, l)
     in
     tree_fold assign tree
