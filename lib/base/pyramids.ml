@@ -19,12 +19,26 @@ module type Formula = sig
   val assigned_variables : t Assignment.t -> KeySet.t
 end
 
-module type Pyramid = sig
+module type Proofsystem = sig
   module Key : Map.OrderedType
   module LHS : Formula
   module RHS : Formula
+  module LHSAssignment : Map.S
+  module RHSAssignment : Map.S
 
   type rule_name_type
+
+  type rule =
+    rule_name_type
+    * LHS.pattern
+    * RHS.pattern
+    * (LHS.pattern * RHS.pattern) list
+
   type statement = LHS.t * RHS.t
-  type t = (statement * rule_name_type) tree_type
+  type t = (rule_name_type * statement) tree_type
+
+  val rule_name_to_string : rule_name_type -> string
+  val sep : string
 end
+
+module Pyramid (P : Proofsystem) = struct end
