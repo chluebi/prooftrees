@@ -179,9 +179,9 @@ module type TreeSet = sig
   val keyset_to_string : KeySet.t -> string
   val compare : t -> t -> int
   val assign : t Assignment.t -> pattern -> t
-  (* val match_with : t -> pattern -> t Assignment.t option
-     val free_variables : pattern -> KeySet.t
-     val assigned_variables : t Assignment.t -> KeySet.t *)
+  val match_with : t -> pattern -> t Assignment.t option
+  val free_variables : pattern -> KeySet.t
+  val assigned_variables : t Assignment.t -> KeySet.t
 end
 
 module TreeSet (T : AssignableTree) : TreeSet = struct
@@ -234,4 +234,17 @@ module TreeSet (T : AssignableTree) : TreeSet = struct
         | Some set -> TreeSet.union trees set
         | None -> trees)
     | None -> trees
+
+  let match_with (treeset1 : t) ((s, _) : pattern) : t Assignment.t option =
+    match s with
+    | Some s -> Some (Assignment.singleton s treeset1)
+    | None -> Some Assignment.empty
+
+  let free_variables ((s, _) : pattern) =
+    match s with Some s -> KeySet.singleton s | None -> KeySet.empty
+
+  let assigned_variables (assignment : t Assignment.t) =
+    Assignment.fold
+      (fun key _ acc -> KeySet.add key acc)
+      assignment KeySet.empty
 end
