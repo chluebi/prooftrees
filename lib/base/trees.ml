@@ -20,9 +20,9 @@ end
 
 module type AssignableTree = sig
   module Key : Map.OrderedType
-  module SubtreeAssignment : Map.S
-  module VariableAssignment : Map.S
-  module KeySet : Set.S
+  module SubtreeAssignment : Map.S with type key = Key.t
+  module VariableAssignment : Map.S with type key = Key.t
+  module KeySet : Set.S with type elt = Key.t
 
   type elt
   type t = elt tree_type
@@ -225,37 +225,40 @@ module TreeAssigner (M : AssignableTree) = struct
 end
 
 module type TreeSet = sig
-  module SubtreeAssignment : Map.S
-  module VariableAssignment : Map.S
-  module KeySet : Set.S
+  module Key : Map.OrderedType
+  module Assignment : Map.S with type key = Key.t
+  module KeySet : Set.S with type elt = Key.t
   module TreeSet : Set.S
 
   type elt
   type t = TreeSet.t
   type pattern = KeySet.elt option * t
+  type ass
 
   val check : t -> unit
   val check_pattern : pattern -> unit
   val to_string : t -> string
   val pattern_to_string : pattern -> string
-  val ass_to_string : t SubtreeAssignment.t -> string
+  val key_to_string : Key.t -> string
+  val ass_to_string : ass -> string
   val keyset_to_string : KeySet.t -> string
   val compare : t -> t -> int
-  val assign : t SubtreeAssignment.t -> pattern -> t
-  val match_with : t -> pattern -> t SubtreeAssignment.t option
+  val assign : ass -> pattern -> t
+  val match_with : t -> pattern -> ass option
   val free_variables : pattern -> KeySet.t
-  val assigned_variables : t SubtreeAssignment.t -> KeySet.t
+  val assigned_variables : ass -> KeySet.t
 end
 
 module TreeSet (T : AssignableTree) : TreeSet = struct
-  module SubtreeAssignment = Map.Make (T.Key)
-  module VariableAssignment = Map.Make (T.Key)
-  module KeySet = Set.Make (T.Key)
+  module Key = T.Key
+  module Assignment = T.SubtreeAssignment
+  module KeySet = T.KeySet
   module TreeSet = Set.Make (T)
 
   type elt = T.t
   type t = TreeSet.t
   type pattern = T.Key.t option * t
+  type ass = T.ass * t Assignment.t
 
   let check (trees : t) : unit = TreeSet.iter T.check trees
   let check_pattern ((_, trees) : pattern) : unit = check trees
@@ -275,14 +278,16 @@ module TreeSet (T : AssignableTree) : TreeSet = struct
     | s, t when t = "{}" -> s
     | s, t -> t ^ " u " ^ s
 
-  let ass_to_string (assignment : t SubtreeAssignment.t) : string =
+  let key_to_string = T.key_to_string
+
+  let ass_to_string ((tree_assignment, set_assignment) : ass) : string =
     let l =
-      SubtreeAssignment.fold
+      Assignment.fold
         (fun key value acc ->
           (T.key_to_string key ^ " -> " ^ to_string value) :: acc)
-        assignment []
+        set_assignment []
     in
-    "{" ^ Util.join ", " l ^ "}"
+    T.ass_to_string tree_assignment ^ ", {" ^ Util.join ", " l ^ "}"
 
   let keyset_to_string (keyset : KeySet.t) : string =
     let l = KeySet.fold (fun elt acc -> key_to_string elt :: acc) keyset [] in
@@ -291,25 +296,45 @@ module TreeSet (T : AssignableTree) : TreeSet = struct
   let compare (treeset1 : t) (treeset2 : t) : int =
     String.compare (to_string treeset1) (to_string treeset2)
 
-  let assign (assignment : t SubtreeAssignment.t) ((s, trees) : pattern) : t =
+  let assign ((tree_assignment, set_assignment) : ass) ((s, trees) : pattern) :
+      t =
+    let assigned_trees =
+      TreeSet.fold
+        (fun elt acc -> TreeSet.add (T.assign tree_assignment elt) acc)
+        trees TreeSet.empty
+    in
     match s with
     | Some s -> (
-        match SubtreeAssignment.find_opt s assignment with
-        | Some set -> TreeSet.union trees set
-        | None -> trees)
-    | None -> trees
+        match Assignment.find_opt s set_assignment with
+        | Some set -> TreeSet.union assigned_trees set
+        | None -> assigned_trees)
+    | None -> assigned_trees
 
-  let match_with (treeset1 : t) ((s, _) : pattern) :
-      t SubtreeAssignment.t option =
+  let match_with (treeset1 : t) ((s, _) : pattern) : ass option =
     match s with
-    | Some s -> Some (SubtreeAssignment.singleton s treeset1)
-    | None -> Some SubtreeAssignment.empty
+    | Some s ->
+        Some
+          ( (T.SubtreeAssignment.empty, T.VariableAssignment.empty),
+            Assignment.singleton s treeset1 )
+    | None ->
+        Some
+          ( (T.SubtreeAssignment.empty, T.VariableAssignment.empty),
+            Assignment.empty )
 
-  let free_variables ((s, _) : pattern) =
-    match s with Some s -> KeySet.singleton s | None -> KeySet.empty
+  let free_variables ((s, trees) : pattern) =
+    let free_variables_trees =
+      TreeSet.fold
+        (fun elt acc -> KeySet.union (T.free_variables elt) acc)
+        trees KeySet.empty
+    in
+    let free_set_variables =
+      match s with Some s -> KeySet.singleton s | None -> KeySet.empty
+    in
+    KeySet.union free_variables_trees free_set_variables
 
-  let assigned_variables (assignment : t SubtreeAssignment.t) =
-    SubtreeAssignment.fold
+  let assigned_variables ((tree_assignment, set_assignment) : ass) =
+    let assigned_tree_variables = T.assigned_variables tree_assignment in
+    Assignment.fold
       (fun key _ acc -> KeySet.add key acc)
-      assignment KeySet.empty
+      set_assignment assigned_tree_variables
 end
