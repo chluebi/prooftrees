@@ -69,8 +69,13 @@ module Examples = struct
   let keysetCD = list_to_set [ "C"; "D" ]
 
   (* *)
-  let list_to_tree_set (l : LogicExpression.t list) : S.TreeSet.t =
+  let list_to_tree_set (l : LogicExpression.t list) : S.t =
     List.fold_left (fun acc elt -> S.TreeSet.add elt acc) S.TreeSet.empty l
 
-  let treesetA : S.TreeSet.t = list_to_tree_set [ treeA ]
+  let treesetA : S.t = list_to_tree_set [ treeA ]
+  let treesetB : S.t = list_to_tree_set [ treeB ]
+  let treesetAB : S.t = list_to_tree_set [ treeA; treeB ]
+
+  (* *)
+  let treeset_patternA : S.pattern = (Some "S", treesetA)
 end
