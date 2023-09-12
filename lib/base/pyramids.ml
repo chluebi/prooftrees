@@ -20,13 +20,12 @@ module type Formula = sig
 end
 
 module type Proofsystem = sig
-  module Key : Map.OrderedType
   module LHS : Formula
   module RHS : Formula
-  module LHSAssignment : Map.S
-  module RHSAssignment : Map.S
 
   type rule_name_type
+  type assignment
+  type keyset
 
   type rule =
     rule_name_type
@@ -40,5 +39,3 @@ module type Proofsystem = sig
   val rule_name_to_string : rule_name_type -> string
   val sep : string
 end
-
-module Pyramid (P : Proofsystem) = struct end

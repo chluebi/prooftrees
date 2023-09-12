@@ -26,6 +26,13 @@ module LogicExpression = struct
 
   let var_opt (op : elt) : string option =
     match op with Var s -> Some s | _ -> None
+
+  let subtree_var_opt = var_opt
+  let op_var_opt _ = None
+  let assign_op _ (op : elt) = op
+
+  let match_op (op1 : elt) (op2 : elt) : bool * (Key.t * Key.t) option =
+    (op1 = op2, None)
 end
 
 module Examples = struct
@@ -43,10 +50,16 @@ module Examples = struct
   let tree4 = Node (Not, [ Node (Var "A", []) ])
 
   (* *)
-  let ass0 = Assignment.empty
-  let ass1 = Assignment.add "B" tree2 Assignment.empty
-  let ass2 = Assignment.add "A" tree1 ass1
-  let ass3 = Assignment.add "A" tree3 Assignment.empty
+  let subtree_ass0 = SubtreeAssignment.empty
+  let subtree_ass1 = SubtreeAssignment.add "B" tree2 SubtreeAssignment.empty
+  let subtree_ass2 = SubtreeAssignment.add "A" tree1 subtree_ass1
+  let subtree_ass3 = SubtreeAssignment.add "A" tree3 SubtreeAssignment.empty
+
+  (* *)
+  let ass0 = (subtree_ass0, VariableAssignment.empty)
+  let ass1 = (subtree_ass1, VariableAssignment.empty)
+  let ass2 = (subtree_ass2, VariableAssignment.empty)
+  let ass3 = (subtree_ass3, VariableAssignment.empty)
 
   (* *)
   let keysetA = list_to_set [ "A" ]

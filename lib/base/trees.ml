@@ -12,40 +12,47 @@ module type BaseTree = sig
   val key_to_string : Key.t -> string
   val child_count : elt -> int
   val var_opt : elt -> Key.t option
+  val subtree_var_opt : elt -> Key.t option
+  val op_var_opt : elt -> Key.t option
+  val assign_op : Key.t -> elt -> elt
+  val match_op : elt -> elt -> bool * (Key.t * Key.t) option
 end
 
 module type AssignableTree = sig
+  module Key : Map.OrderedType
+  module SubtreeAssignment : Map.S
+  module VariableAssignment : Map.S
+  module KeySet : Set.S
+
   type elt
   type t = elt tree_type
   type pattern = t
-
-  module Key : Map.OrderedType
-  module Assignment : Map.S
-  module KeySet : Set.S
+  type ass = t SubtreeAssignment.t * Key.t VariableAssignment.t
 
   val check : t -> unit
   val check_pattern : t -> unit
   val to_string : t -> string
   val pattern_to_string : pattern -> string
   val key_to_string : Key.t -> string
-  val ass_to_string : t Assignment.t -> string
+  val ass_to_string : ass -> string
   val keyset_to_string : KeySet.t -> string
   val compare : t -> t -> int
-  val var_opt : elt -> Key.t option
-  val assign : t Assignment.t -> t -> t
-  val match_with : t -> t -> t Assignment.t option
+  val assign : ass -> t -> t
+  val match_with : t -> t -> ass option
   val free_variables : t -> KeySet.t
-  val assigned_variables : t Assignment.t -> KeySet.t
+  val assigned_variables : ass -> KeySet.t
 end
 
 module AssignableTree (T : BaseTree) = struct
+  module Key = T.Key
+  module SubtreeAssignment = Map.Make (T.Key)
+  module VariableAssignment = Map.Make (T.Key)
+  module KeySet = Set.Make (T.Key)
+
   type elt = T.elt
   type t = elt tree_type
   type pattern = t
-
-  module Key = T.Key
-  module Assignment = Map.Make (T.Key)
-  module KeySet = Set.Make (T.Key)
+  type ass = t SubtreeAssignment.t * Key.t VariableAssignment.t
 
   let check (tree : t) : unit =
     let check (op : elt) (l : unit list) =
@@ -73,14 +80,20 @@ module AssignableTree (T : BaseTree) = struct
   let pattern_to_string = to_string
   let key_to_string = T.key_to_string
 
-  let ass_to_string (assignment : t Assignment.t) : string =
-    let l =
-      Assignment.fold
+  let ass_to_string ((subtree_assignment, variable_assignment) : ass) : string =
+    let l_subtree =
+      SubtreeAssignment.fold
         (fun key value acc ->
           (key_to_string key ^ " -> " ^ to_string value) :: acc)
-        assignment []
+        subtree_assignment []
     in
-    "{" ^ Util.join ", " l ^ "}"
+    let l_variable =
+      VariableAssignment.fold
+        (fun key value acc ->
+          (key_to_string key ^ " -> " ^ key_to_string value) :: acc)
+        variable_assignment []
+    in
+    "{" ^ Util.join ", " (List.append l_subtree l_variable) ^ "}"
 
   let keyset_to_string (keyset : KeySet.t) : string =
     let l = KeySet.fold (fun elt acc -> key_to_string elt :: acc) keyset [] in
@@ -89,40 +102,82 @@ module AssignableTree (T : BaseTree) = struct
   let compare (tree1 : t) (tree2 : t) : int =
     String.compare (to_string tree1) (to_string tree2)
 
-  let var_opt = T.var_opt
-
-  let assign (assignment : t Assignment.t) (tree : t) : t =
+  let assign ((subtree_assignment, variable_assignment) : ass) (tree : t) : t =
     let assign (op : elt) (l : t list) =
-      match var_opt op with
+      let new_op =
+        match T.op_var_opt op with
+        | Some s -> (
+            match VariableAssignment.find_opt s variable_assignment with
+            | Some s -> T.assign_op s op
+            | None -> op)
+        | None -> op
+      in
+      match T.subtree_var_opt op with
       | Some s -> (
-          match Assignment.find_opt s assignment with
+          match SubtreeAssignment.find_opt s subtree_assignment with
           | Some subtree -> subtree
-          | None -> Node (op, l))
-      | _ -> Node (op, l)
+          | None -> Node (new_op, l))
+      | _ -> Node (new_op, l)
     in
     tree_fold assign tree
 
-  let merge (assignment1 : t Assignment.t) (assignment2 : t Assignment.t) :
-      t Assignment.t option =
-    let f (key : T.Key.t) (value : t) (assignment2 : t Assignment.t option) :
-        t Assignment.t option =
+  let merge ((subtree_assignment1, variable_assignment1) : ass)
+      ((subtree_assignment2, variable_assignment2) : ass) : ass option =
+    let f_subtree (key : T.Key.t) (value : t)
+        (assignment2 : t SubtreeAssignment.t option) :
+        t SubtreeAssignment.t option =
       match assignment2 with
       | Some assignment2 -> (
-          match Assignment.find_opt key assignment2 with
+          match SubtreeAssignment.find_opt key assignment2 with
           | Some v when v = value -> Some assignment2
           | Some _ -> None
-          | None -> Some (Assignment.add key value assignment2))
+          | None -> Some (SubtreeAssignment.add key value assignment2))
       | None -> None
     in
-    Assignment.fold f assignment1 (Some assignment2)
+    let f_variable (key : T.Key.t) (value : T.Key.t)
+        (assignment2 : Key.t VariableAssignment.t option) :
+        Key.t VariableAssignment.t option =
+      match assignment2 with
+      | Some assignment2 -> (
+          match VariableAssignment.find_opt key assignment2 with
+          | Some v when v = value -> Some assignment2
+          | Some _ -> None
+          | None -> Some (VariableAssignment.add key value assignment2))
+      | None -> None
+    in
+    let subtree_assignment =
+      SubtreeAssignment.fold f_subtree subtree_assignment1
+        (Some subtree_assignment2)
+    in
+    let variable_assignment =
+      VariableAssignment.fold f_variable variable_assignment1
+        (Some variable_assignment2)
+    in
+    match (subtree_assignment, variable_assignment) with
+    | None, None -> None
+    | None, _ -> None
+    | _, None -> None
+    | Some s, Some v -> Some (s, v)
 
-  let rec match_with (tree : t) (structure : t) : t Assignment.t option =
+  let rec match_with (tree : t) (structure : t) : ass option =
     match (tree, structure) with
     | Node (op1, l1), Node (op2, l2) -> (
-        match T.var_opt op2 with
-        | Some s -> Some (Assignment.add s (Node (op1, l1)) Assignment.empty)
+        match T.subtree_var_opt op2 with
+        | Some s ->
+            Some
+              ( SubtreeAssignment.singleton s (Node (op1, l1)),
+                VariableAssignment.empty )
         | None ->
-            if op1 = op2 && List.length l1 = List.length l2 then
+            let same_op, variable_assignment_tuple = T.match_op op1 op2 in
+            let variable_assignment =
+              match variable_assignment_tuple with
+              | Some (tree_variable_assignment, structure_variable_assignment)
+                ->
+                  VariableAssignment.singleton structure_variable_assignment
+                    tree_variable_assignment
+              | None -> VariableAssignment.empty
+            in
+            if same_op && List.length l1 = List.length l2 then
               let l =
                 List.map (fun (a, b) -> match_with a b) (List.combine l1 l2)
               in
@@ -131,7 +186,9 @@ module AssignableTree (T : BaseTree) = struct
                 | Some r, Some ass -> merge r ass
                 | _ -> None
               in
-              List.fold_left f (Some Assignment.empty) l
+              List.fold_left f
+                (Some (SubtreeAssignment.empty, variable_assignment))
+                l
             else None)
 
   let free_variables (tree : t) : KeySet.t =
@@ -147,10 +204,15 @@ module AssignableTree (T : BaseTree) = struct
     in
     tree_fold f tree
 
-  let assigned_variables (assignment : t Assignment.t) =
-    Assignment.fold
-      (fun key _ acc -> KeySet.add key acc)
-      assignment KeySet.empty
+  let assigned_variables ((subtree_assignment, variable_assignment) : ass) :
+      KeySet.t =
+    KeySet.union
+      (SubtreeAssignment.fold
+         (fun key _ acc -> KeySet.add key acc)
+         subtree_assignment KeySet.empty)
+      (VariableAssignment.fold
+         (fun key _ acc -> KeySet.add key acc)
+         variable_assignment KeySet.empty)
 end
 
 module TreeAssigner (M : AssignableTree) = struct
@@ -163,7 +225,8 @@ module TreeAssigner (M : AssignableTree) = struct
 end
 
 module type TreeSet = sig
-  module Assignment : Map.S
+  module SubtreeAssignment : Map.S
+  module VariableAssignment : Map.S
   module KeySet : Set.S
   module TreeSet : Set.S
 
@@ -175,17 +238,18 @@ module type TreeSet = sig
   val check_pattern : pattern -> unit
   val to_string : t -> string
   val pattern_to_string : pattern -> string
-  val ass_to_string : t Assignment.t -> string
+  val ass_to_string : t SubtreeAssignment.t -> string
   val keyset_to_string : KeySet.t -> string
   val compare : t -> t -> int
-  val assign : t Assignment.t -> pattern -> t
-  val match_with : t -> pattern -> t Assignment.t option
+  val assign : t SubtreeAssignment.t -> pattern -> t
+  val match_with : t -> pattern -> t SubtreeAssignment.t option
   val free_variables : pattern -> KeySet.t
-  val assigned_variables : t Assignment.t -> KeySet.t
+  val assigned_variables : t SubtreeAssignment.t -> KeySet.t
 end
 
 module TreeSet (T : AssignableTree) : TreeSet = struct
-  module Assignment = Map.Make (T.Key)
+  module SubtreeAssignment = Map.Make (T.Key)
+  module VariableAssignment = Map.Make (T.Key)
   module KeySet = Set.Make (T.Key)
   module TreeSet = Set.Make (T)
 
@@ -211,9 +275,9 @@ module TreeSet (T : AssignableTree) : TreeSet = struct
     | s, t when t = "{}" -> s
     | s, t -> t ^ " u " ^ s
 
-  let ass_to_string (assignment : t Assignment.t) : string =
+  let ass_to_string (assignment : t SubtreeAssignment.t) : string =
     let l =
-      Assignment.fold
+      SubtreeAssignment.fold
         (fun key value acc ->
           (T.key_to_string key ^ " -> " ^ to_string value) :: acc)
         assignment []
@@ -227,24 +291,25 @@ module TreeSet (T : AssignableTree) : TreeSet = struct
   let compare (treeset1 : t) (treeset2 : t) : int =
     String.compare (to_string treeset1) (to_string treeset2)
 
-  let assign (assignment : t Assignment.t) ((s, trees) : pattern) : t =
+  let assign (assignment : t SubtreeAssignment.t) ((s, trees) : pattern) : t =
     match s with
     | Some s -> (
-        match Assignment.find_opt s assignment with
+        match SubtreeAssignment.find_opt s assignment with
         | Some set -> TreeSet.union trees set
         | None -> trees)
     | None -> trees
 
-  let match_with (treeset1 : t) ((s, _) : pattern) : t Assignment.t option =
+  let match_with (treeset1 : t) ((s, _) : pattern) :
+      t SubtreeAssignment.t option =
     match s with
-    | Some s -> Some (Assignment.singleton s treeset1)
-    | None -> Some Assignment.empty
+    | Some s -> Some (SubtreeAssignment.singleton s treeset1)
+    | None -> Some SubtreeAssignment.empty
 
   let free_variables ((s, _) : pattern) =
     match s with Some s -> KeySet.singleton s | None -> KeySet.empty
 
-  let assigned_variables (assignment : t Assignment.t) =
-    Assignment.fold
+  let assigned_variables (assignment : t SubtreeAssignment.t) =
+    SubtreeAssignment.fold
       (fun key _ acc -> KeySet.add key acc)
       assignment KeySet.empty
 end
