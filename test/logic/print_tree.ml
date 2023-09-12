@@ -1,7 +1,3 @@
-open Base.Trees
-open Logic
 open Logic.Examples
 
-let () =
-  let module ResultModule = TreeAssigner (AssignableTree (LogicExpression)) in
-  print_endline (ResultModule.print_tree tree1)
+let () = print_endline (T.to_string tree1)

@@ -1,5 +1,3 @@
-open Base.Trees
-open Logic
 open Logic.Examples
 
 let () =
@@ -14,9 +12,8 @@ let () =
       (tree3, keysetAB);
     ]
   in
-  let module ResultModule = TreeAssigner (AssignableTree (LogicExpression)) in
   let f (tree, expected) =
-    match ResultModule.free_variables tree = expected with
+    match T.free_variables tree = expected with
     | true -> print_endline "true"
     | false -> print_endline "false"
   in

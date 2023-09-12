@@ -19,12 +19,13 @@ module type BaseTree = sig
 end
 
 module type AssignableTree = sig
-  module Key : Map.OrderedType
+  module T : BaseTree
+  module Key : Map.OrderedType with type t = T.Key.t
   module SubtreeAssignment : Map.S with type key = Key.t
   module VariableAssignment : Map.S with type key = Key.t
   module KeySet : Set.S with type elt = Key.t
 
-  type elt
+  type elt = T.elt
   type t = elt tree_type
   type pattern = t
   type ass = t SubtreeAssignment.t * Key.t VariableAssignment.t
@@ -44,6 +45,7 @@ module type AssignableTree = sig
 end
 
 module AssignableTree (T : BaseTree) = struct
+  module T = T
   module Key = T.Key
   module SubtreeAssignment = Map.Make (T.Key)
   module VariableAssignment = Map.Make (T.Key)
@@ -215,22 +217,14 @@ module AssignableTree (T : BaseTree) = struct
          variable_assignment KeySet.empty)
 end
 
-module TreeAssigner (M : AssignableTree) = struct
-  let print_tree tree = M.to_string tree
-  let print_assignment ass = M.ass_to_string ass
-  let print_keyset keyset = M.keyset_to_string keyset
-  let assign ass tree = M.assign ass tree
-  let match_with tree structure = M.match_with tree structure
-  let free_variables tree = M.free_variables tree
-end
-
 module type TreeSet = sig
-  module Key : Map.OrderedType
+  module T : AssignableTree
+  module Key : Map.OrderedType with type t = T.Key.t
   module Assignment : Map.S with type key = Key.t
   module KeySet : Set.S with type elt = Key.t
-  module TreeSet : Set.S
+  module TreeSet : Set.S with type elt = T.t
 
-  type elt
+  type elt = T.t
   type t = TreeSet.t
   type pattern = KeySet.elt option * t
   type ass
@@ -249,9 +243,10 @@ module type TreeSet = sig
   val assigned_variables : ass -> KeySet.t
 end
 
-module TreeSet (T : AssignableTree) : TreeSet = struct
+module TreeSet (T : AssignableTree) = struct
+  module T = T
   module Key = T.Key
-  module Assignment = T.SubtreeAssignment
+  module Assignment = Map.Make (Key)
   module KeySet = T.KeySet
   module TreeSet = Set.Make (T)
 

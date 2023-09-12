@@ -37,10 +37,8 @@ end
 
 module Examples = struct
   open LogicExpression
-  open AssignableTree (LogicExpression)
-
-  let list_to_set (l : 'a list) : KeySet.t =
-    List.fold_left (fun acc elt -> KeySet.add elt acc) KeySet.empty l
+  module T = AssignableTree (LogicExpression)
+  module S = TreeSet (T)
 
   let treeA = Node (Var "A", [])
   let treeB = Node (Var "B", [])
@@ -49,21 +47,30 @@ module Examples = struct
   let tree3 = Node (Or, [ Node (Var "A", []); Node (Var "A", []) ])
   let tree4 = Node (Not, [ Node (Var "A", []) ])
 
-  (* *)
-  let subtree_ass0 = SubtreeAssignment.empty
-  let subtree_ass1 = SubtreeAssignment.add "B" tree2 SubtreeAssignment.empty
-  let subtree_ass2 = SubtreeAssignment.add "A" tree1 subtree_ass1
-  let subtree_ass3 = SubtreeAssignment.add "A" tree3 SubtreeAssignment.empty
+  let list_to_set (l : LogicExpression.Key.t list) : T.KeySet.t =
+    List.fold_left (fun acc elt -> T.KeySet.add elt acc) T.KeySet.empty l
 
   (* *)
-  let ass0 = (subtree_ass0, VariableAssignment.empty)
-  let ass1 = (subtree_ass1, VariableAssignment.empty)
-  let ass2 = (subtree_ass2, VariableAssignment.empty)
-  let ass3 = (subtree_ass3, VariableAssignment.empty)
+  let subtree_ass0 = T.SubtreeAssignment.empty
+  let subtree_ass1 = T.SubtreeAssignment.add "B" tree2 T.SubtreeAssignment.empty
+  let subtree_ass2 = T.SubtreeAssignment.add "A" tree1 subtree_ass1
+  let subtree_ass3 = T.SubtreeAssignment.add "A" tree3 T.SubtreeAssignment.empty
+
+  (* *)
+  let ass0 = (subtree_ass0, T.VariableAssignment.empty)
+  let ass1 = (subtree_ass1, T.VariableAssignment.empty)
+  let ass2 = (subtree_ass2, T.VariableAssignment.empty)
+  let ass3 = (subtree_ass3, T.VariableAssignment.empty)
 
   (* *)
   let keysetA = list_to_set [ "A" ]
   let keysetB = list_to_set [ "B" ]
   let keysetAB = list_to_set [ "A"; "B" ]
   let keysetCD = list_to_set [ "C"; "D" ]
+
+  (* *)
+  let list_to_tree_set (l : LogicExpression.t list) : S.TreeSet.t =
+    List.fold_left (fun acc elt -> S.TreeSet.add elt acc) S.TreeSet.empty l
+
+  let treesetA : S.TreeSet.t = list_to_tree_set [ treeA ]
 end
