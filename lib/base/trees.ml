@@ -238,6 +238,7 @@ module type TreeSet = sig
   val ass_to_string : ass -> string
   val keyset_to_string : KeySet.t -> string
   val compare : t -> t -> int
+  val merge : ass -> ass -> ass option
   val assign : ass -> pattern -> t
   val match_with : t -> pattern -> ass option
   val free_variables : pattern -> KeySet.t
@@ -291,6 +292,25 @@ module TreeSet (T : AssignableTree) = struct
 
   let compare (treeset1 : t) (treeset2 : t) : int =
     String.compare (to_string treeset1) (to_string treeset2)
+
+  let merge ((tree_assignment1, set_assignment1) : ass)
+      ((tree_assignment2, set_assignment2) : ass) : ass option =
+    let f (key : T.Key.t) (value : t) (assignment2 : t Assignment.t option) :
+        t Assignment.t option =
+      match assignment2 with
+      | Some assignment2 -> (
+          match Assignment.find_opt key assignment2 with
+          | Some v when v = value -> Some assignment2
+          | Some _ -> None
+          | None -> Some (Assignment.add key value assignment2))
+      | None -> None
+    in
+    let assignment = Assignment.fold f set_assignment1 (Some set_assignment2) in
+    match (T.merge tree_assignment1 tree_assignment2, assignment) with
+    | None, None -> None
+    | None, _ -> None
+    | _, None -> None
+    | Some t, Some s -> Some (t, s)
 
   let assign ((tree_assignment, set_assignment) : ass) ((s, trees) : pattern) :
       t =
