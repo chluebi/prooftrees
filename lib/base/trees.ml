@@ -39,6 +39,7 @@ module type AssignableTree = sig
   val keyset_to_string : KeySet.t -> string
   val compare : t -> t -> int
   val assign : ass -> t -> t
+  val merge : ass -> ass -> ass option
   val match_with : t -> t -> ass option
   val free_variables : t -> KeySet.t
   val assigned_variables : ass -> KeySet.t
