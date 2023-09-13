@@ -1,6 +1,6 @@
 open Base.Trees
-open Logic
-open Logic.Examples
+open Logic.Logic_exp
+open Logic.Logic_exp.Examples
 
 let () =
   let module ResultModule = AssignableTree (LogicExpression) in

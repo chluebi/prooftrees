@@ -1,4 +1,4 @@
-open Logic.Examples
+open Logic.Logic_exp.Examples
 
 let () =
   let inputs =
