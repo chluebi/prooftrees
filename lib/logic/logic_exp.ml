@@ -3,13 +3,14 @@ open Base.Trees
 module LogicExpression = struct
   module Key = String
 
-  type elt = Or | And | Not | Var of Key.t | Top | Bot
+  type elt = Or | And | Not | Arrow | Var of Key.t | Top | Bot
   type t = elt tree_type
 
   let element_to_string = function
     | Or -> "Or"
     | And -> "And"
     | Not -> "Not"
+    | Arrow -> "Implies"
     | Var s -> s
     | Top -> "Top"
     | Bot -> "Bot"
@@ -19,6 +20,7 @@ module LogicExpression = struct
   let child_count = function
     | Or -> 2
     | And -> 2
+    | Arrow -> 2
     | Not -> 1
     | Var _ -> 0
     | Top -> 0

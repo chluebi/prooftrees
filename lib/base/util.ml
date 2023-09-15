@@ -9,10 +9,7 @@ let crossproduct (xs : 'a list list) : 'a list list =
   | [] -> []
   | _ ->
       let f acc l =
-        match acc with
-        | [] -> List.map (fun x -> [ x ]) l
-        | _ ->
-            let g elt = List.map (fun x -> List.append x [ elt ]) acc in
-            List.concat_map g l
+        let g elt = List.map (fun x -> List.append x [ elt ]) acc in
+        List.concat_map g l
       in
-      List.fold_left f [] xs
+      List.fold_left f (List.map (fun x -> [ x ]) (List.hd xs)) (List.tl xs)

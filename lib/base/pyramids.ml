@@ -155,5 +155,52 @@ module ProofAssistant (P : Proofsystem) = struct
             List.map (fun x -> (rule_name, x)) pred_combinations
       in
       let make_tree (rule_name, pred) = Node ((rule_name, statement), pred) in
+      let f acc ass =
+        match acc with
+        | [] -> (
+            match List.map make_tree (prove_ass ass) with
+            | [] -> []
+            | xs -> [ List.hd xs ])
+        | xs -> [ List.hd xs ]
+      in
+      List.fold_left f [] assignments
+
+  let rec prove_all (statement : P.statement) (height_left : int) : P.t list =
+    if height_left = 0 then []
+    else
+      let find_assignments (rule : P.rule) =
+        let _, rule_pattern, _, _, guess = rule in
+        match P.match_with statement rule_pattern with
+        | Some assignment -> (
+            let free_vars = free_variables_ass rule assignment in
+            match free_vars = P.KeySet.empty with
+            | true -> [ (rule, assignment) ]
+            | false ->
+                List.map (fun x -> (rule, x)) (guess assignment free_vars))
+        | None -> []
+      in
+      let assignments = List.concat_map find_assignments P.rules in
+      let assignments =
+        List.filter
+          (fun (rule, ass) -> free_variables_ass rule ass = P.KeySet.empty)
+          assignments
+      in
+      let assignments =
+        List.filter
+          (fun ((_, _, _, (_, side_condition), _), ass) -> side_condition ass)
+          assignments
+      in
+      let prove_ass ((rule_name, _, pred_patterns, _, _), ass) =
+        match List.length pred_patterns with
+        | 0 -> [ (rule_name, []) ]
+        | _ ->
+            let pred_statements = List.map (P.assign ass) pred_patterns in
+            let pred_trees =
+              List.map (fun x -> prove_all x (height_left - 1)) pred_statements
+            in
+            let pred_combinations = crossproduct pred_trees in
+            List.map (fun x -> (rule_name, x)) pred_combinations
+      in
+      let make_tree (rule_name, pred) = Node ((rule_name, statement), pred) in
       List.concat_map (fun x -> List.map make_tree (prove_ass x)) assignments
 end

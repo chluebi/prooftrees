@@ -23,6 +23,7 @@ module Proplogic = struct
   type t = (rule_name_type * statement) tree_type
 
   let g = (Some "G", LHS.TreeSet.empty)
+  let g_tree tree = (Some "G", LHS.TreeSet.singleton tree)
 
   (* *)
   let sc_trivial _ = true
@@ -63,6 +64,44 @@ module Proplogic = struct
     in
     LHS.TreeSet.fold f gamma []
 
+  let guess_match_gamma_list (pattern_list : RHS.pattern list)
+      (assignment : ass) (ks : KeySet.t) =
+    List.concat_map (fun x -> guess_match_gamma x assignment ks) pattern_list
+
+  let guess_match_tnd (pattern : RHS.pattern) (var : string)
+      ((tree_assignment, set_assignment) : ass) (_ : KeySet.t) =
+    let subtree_assignment, _ = tree_assignment in
+    let free_variables =
+      RHS.free_variables (RHS.SubtreeAssignment.find var subtree_assignment)
+    in
+    let tnd_list : RHS.t list =
+      let f x =
+        Node
+          ( LogicExpression.Or,
+            [ Node (Var x, []); Node (Not, [ Node (Var x, []) ]) ] )
+      in
+      List.map f (List.of_seq (KeySet.to_seq free_variables))
+    in
+    let tnd_set = LHS.TreeSet.of_seq (List.to_seq tnd_list) in
+    let f set_elt acc =
+      let new_list =
+        match RHS.match_with set_elt pattern with
+        | Some ass -> (
+            match RHS.merge ass tree_assignment with
+            | Some ass -> [ (ass, set_assignment) ]
+            | None -> [])
+        | None -> []
+      in
+      List.append new_list acc
+    in
+    LHS.TreeSet.fold f tnd_set []
+
+  let guess_combine guess1 guess2 (assignment : ass) (free_variables : KeySet.t)
+      =
+    List.append
+      (guess1 assignment free_variables)
+      (guess2 assignment free_variables)
+
   let rules : rule list =
     [
       ( "Axiom",
@@ -70,6 +109,43 @@ module Proplogic = struct
         [],
         ("Gamma contains formula", sc_contains "X"),
         guess_empty );
+      ( "TND",
+        ( g,
+          Node (Or, [ Node (Var "X", []); Node (Not, [ Node (Var "X", []) ]) ])
+        ),
+        [],
+        ("", sc_trivial),
+        guess_empty );
+      ( "Arrow-I",
+        (g, Node (Arrow, [ Node (Var "X", []); Node (Var "Y", []) ])),
+        [ (g_tree (Node (Var "X", [])), Node (Var "Y", [])) ],
+        ("", sc_trivial),
+        guess_empty );
+      ( "Arrow-E",
+        (g, Node (Var "Y", [])),
+        [
+          (g, Node (Arrow, [ Node (Var "X", []); Node (Var "Y", []) ]));
+          (g, Node (Var "X", []));
+        ],
+        ("", sc_trivial),
+        guess_match_gamma
+          (Node (Arrow, [ Node (Var "X", []); Node (Var "Y", []) ])) );
+      ( "Bot-E",
+        (g, Node (Var "X", [])),
+        [ (g, Node (Bot, [])) ],
+        ("", sc_trivial),
+        guess_empty );
+      ( "Not-I",
+        (g, Node (Not, [ Node (Var "X", []) ])),
+        [ (g_tree (Node (Var "X", [])), Node (Bot, [])) ],
+        ("", sc_trivial),
+        guess_empty );
+      ( "Not-E",
+        (g, Node (Var "Y", [])),
+        [ (g, Node (Var "X", [])); (g, Node (Not, [ Node (Var "X", []) ])) ],
+        ("", sc_trivial),
+        guess_match_gamma_list
+          [ Node (Var "X", []); Node (Not, [ Node (Var "X", []) ]) ] );
       ( "AND-I",
         (g, Node (And, [ Node (Var "X", []); Node (Var "Y", []) ])),
         [ (g, Node (Var "X", [])); (g, Node (Var "Y", [])) ],
@@ -87,6 +163,30 @@ module Proplogic = struct
         ("", sc_trivial),
         guess_match_gamma
           (Node (And, [ Node (Var "X", []); Node (Var "Y", []) ])) );
+      ( "OR-IL",
+        (g, Node (Or, [ Node (Var "X", []); Node (Var "Y", []) ])),
+        [ (g, Node (Var "X", [])) ],
+        ("", sc_trivial),
+        guess_empty );
+      ( "OR-IR",
+        (g, Node (Or, [ Node (Var "X", []); Node (Var "Y", []) ])),
+        [ (g, Node (Var "Y", [])) ],
+        ("", sc_trivial),
+        guess_empty );
+      ( "OR-E",
+        (g, Node (Var "Z", [])),
+        [
+          (g, Node (Or, [ Node (Var "X", []); Node (Var "Y", []) ]));
+          (g_tree (Node (Var "X", [])), Node (Var "Z", []));
+          (g_tree (Node (Var "Y", [])), Node (Var "Z", []));
+        ],
+        ("", sc_trivial),
+        guess_combine
+          (guess_match_gamma
+             (Node (Or, [ Node (Var "X", []); Node (Var "Y", []) ])))
+          (guess_match_tnd
+             (Node (Or, [ Node (Var "X", []); Node (Var "Y", []) ]))
+             "Z") );
     ]
 
   let rule_name_to_string s = s
@@ -139,6 +239,57 @@ module Examples = struct
   let treeAB = Node (And, [ Node (Var "A", []); Node (Var "B", []) ])
   let treeBA = Node (And, [ Node (Var "B", []); Node (Var "A", []) ])
 
+  let treeOr =
+    Node
+      ( Arrow,
+        [
+          Node (Or, [ Node (Var "A", []); Node (Var "B", []) ]);
+          Node (Or, [ Node (Var "B", []); Node (Var "A", []) ]);
+        ] )
+
+  let tree1 =
+    Node
+      ( Arrow,
+        [
+          Node (Or, [ Node (Var "A", []); Node (Var "B", []) ]);
+          Node
+            ( Arrow,
+              [
+                Node (Var "C", []);
+                Node
+                  ( Or,
+                    [
+                      Node (And, [ Node (Var "A", []); Node (Var "C", []) ]);
+                      Node (And, [ Node (Var "B", []); Node (Var "C", []) ]);
+                    ] );
+              ] );
+        ] )
+
+  let tree2 =
+    Node
+      ( Arrow,
+        [
+          Node
+            (Arrow, [ Node (Not, [ Node (Var "A", []) ]); Node (Var "A", []) ]);
+          Node (Var "A", []);
+        ] )
+
+  let tree3 =
+    Node (Or, [ Node (Not, [ Node (Var "A", []) ]); Node (Var "A", []) ])
+
+  let tree4 =
+    Node
+      ( Arrow,
+        [
+          Node
+            ( Arrow,
+              [
+                Node (Arrow, [ Node (Var "A", []); Node (Var "B", []) ]);
+                Node (Var "A", []);
+              ] );
+          Node (Var "A", []);
+        ] )
+
   (* *)
   let treesetA = list_to_tree_set [ treeA ]
   let treesetB = list_to_tree_set [ treeB ]
@@ -164,4 +315,10 @@ module Examples = struct
     (treesetAB, Node (And, [ Node (Var "A", []); Node (Var "B", []) ]))
 
   let statement2 = (list_to_tree_set [ treeAB ], treeBA)
+  let statement3 = (list_to_tree_set [], Node (Arrow, [ treeAB; treeBA ]))
+  let statement4 = (list_to_tree_set [], treeOr)
+  let statement5 = (list_to_tree_set [], tree1)
+  let statement6 = (list_to_tree_set [], tree2)
+  let statement7 = (list_to_tree_set [], tree3)
+  let statement8 = (list_to_tree_set [], tree4)
 end
